@@ -291,7 +291,7 @@ zip.generateAsync({ type: 'blob' }).then(content => {
       case "l" : return <select 
                     name={col} 
                     id={col} 
-                    className="w-full px-3 py-2 outline-none transition-all duration-200 bg-white"
+                    className="w-full px-3 py-2 outline-none transition-all duration-200 bg-white appearance-none"
                     onChange={(e)=>handleDataChange(activeRow,col,e.target.value)}
                   >
           { 
@@ -603,11 +603,11 @@ useEffect(()=>{
               {col}
             </label>
             <div className="relative">
-              <div className="w-full px-4 py-4 bg-white border-2 border-gray-200 rounded-xl shadow-sm transition-all duration-200 hover:border-blue-300 hover:shadow-md focus-within:border-blue-500 focus-within:shadow-lg cursor-pointer min-h-[56px] flex items-center">
-                <span className="text-gray-900 font-medium w-full">
+              <div className="w-full p-0 bg-white border-2 border-gray-200 rounded-xl shadow-sm transition-all duration-200 hover:border-blue-300 hover:shadow-md focus-within:border-blue-500 focus-within:shadow-lg cursor-pointer min-h-[56px] flex items-center">
+                <span className="text-gray-900 font-medium w-full h-full">
                   {getFieldAsPerType(col)}
                 </span>
-                {isDropDown(col) ? (
+                {!isDropDown(col) ? (
                   <div className="absolute right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
