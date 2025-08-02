@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import  DOMPurify from "dompurify";
 import JSZip from "jszip";
 import { XMLParser } from "fast-xml-parser";
-import { Upload, FileSpreadsheet, Download, ChevronLeft, ChevronRight, Database } from "lucide-react";
+import { Upload, FileSpreadsheet, Download, ChevronLeft, ChevronRight, Database, ChevronDown,ChevronUp} from "lucide-react";
 
 type ColObject = {[index:string]:string}
 interface DataValidation {
@@ -42,6 +42,7 @@ function App() {
   const [validations, setValidations] = useState<DataValidation[]>([]);
   const [dropDownMap,setDropDownMap] = useState<DropDownMap[]>([])
   const [dropDowns,setDropDowns] = useState<DropDowns>({})
+  const [isCollapsed,setCollapsed] = useState<boolean>(true)
 
 
 const dateRegex: RegExp = /^(0?[1-9]|1[0-2])[\/\-](0?[1-9]|[12][0-9]|3[01])[\/\-](\d{4})$/;
@@ -271,7 +272,7 @@ zip.generateAsync({ type: 'blob' }).then(content => {
                     type="number"
                     name={col}
                     id={col}
-                    className="w-full min-w-[300px] px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200"
+                    className="w-full px-3 py-2 outline-none transition-all duration-200"
                     value={dataMap?.[activeRow]?.[col] ?  dataMap[activeRow][col] : 0}
                     onChange={(e) => {
                       handleDataChange(activeRow,col,e.target.value)
@@ -281,8 +282,8 @@ zip.generateAsync({ type: 'blob' }).then(content => {
                     type="date"
                     name={col}
                     id={col}
-                    className="w-full min-w-[300px] px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200"
-                    value={(dataMap?.[activeRow]?.[col])!=null ?  excelDateToJSDate(dataMap[activeRow][col] as number).toISOString().split("T")[0] : new Date().toISOString().split('T')[0]}
+                    className="w-full px-3 py-2 outline-none transition-all duration-200"
+                    value={(dataMap?.[activeRow]?.[col])!=null ? excelDateToJSDate(dataMap[activeRow][col] as (string | number)).toISOString().split("T")[0] : new Date().toISOString().split('T')[0]}
                     onChange={(e) => {
                       handleDataChange(activeRow,col,e.target.value)
                     }}
@@ -290,7 +291,7 @@ zip.generateAsync({ type: 'blob' }).then(content => {
       case "l" : return <select 
                     name={col} 
                     id={col} 
-                    className="w-full min-w-[300px] px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200 bg-white"
+                    className="w-full px-3 py-2 outline-none transition-all duration-200 bg-white"
                     onChange={(e)=>handleDataChange(activeRow,col,e.target.value)}
                   >
           { 
@@ -303,7 +304,7 @@ zip.generateAsync({ type: 'blob' }).then(content => {
                     type="text"
                     name={col}
                     id={col}
-                    className="w-full min-w-[300px] px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200"
+                    className="w-full px-3 py-2 outline-none transition-all duration-200"
                     value={dataMap?.[activeRow]?.[col]?dataMap[activeRow][col] : ""}
                     onChange={(e) => {
                       handleDataChange(activeRow,col,e.target.value)
@@ -362,11 +363,17 @@ function extractOptions(dropDownMap:DropDownMap[]):void{
   })
 }
 
-function excelDateToJSDate(serial:number): Date {
+function excelDateToJSDate(serial:string | number): Date {
+  if(typeof serial == 'string')return new Date(serial);
   const excelEpoch = new Date(1899, 11, 30);  // Excel considers 1900-01-01 as day 1, but there's a known 1-day offset 
   const jsDate = new Date(excelEpoch.getTime());
   jsDate.setDate(jsDate.getDate() + serial);
   return jsDate;
+}
+
+function isDropDown(col:string):boolean{
+  if(col in dropDowns)return true
+  else return false;
 }
 
 //Side Effects
@@ -492,10 +499,27 @@ useEffect(()=>{
         {/* Column Selection */}
         {columns.length > 0 && (
           <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-100">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4">Column Selection</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+            <div className="w-full flex flex-row justify-between">
+              <h2 className="text-2xl font-semibold text-gray-800 mb-4">Column Selection</h2>
+              <div className="flex items-center space-x-2 cursor-pointer" 
+              onClick={()=>{setCollapsed(prev=>!prev)}}>
+              <span className="text-sm text-gray-600">
+                {isCollapsed ? 'Expand' : 'Collapse'}
+              </span>
+              {isCollapsed ? (
+                <ChevronDown className="w-5 h-5 text-gray-600 transition-transform duration-200" />
+              ) : (
+                <ChevronUp className="w-5 h-5 text-gray-600 transition-transform duration-200" />
+              )}
+            </div>
+            </div>
+            
+            {
+            <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 transition-all duration-300 ease-in-out overflow-hidden ${
+            isCollapsed ? 'max-h-0' : 'max-h-[400px]'
+          }`}>
               {columns.map((column, index) => (
-                <div key={`${column + index}`} className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200">
+                <div key={`${column + index}`} className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer">
                   <input 
                     type="checkbox" 
                     name={column} 
@@ -509,6 +533,7 @@ useEffect(()=>{
                 </div>
               ))}
             </div>
+            }
           </div>
         )}
 
@@ -534,7 +559,7 @@ useEffect(()=>{
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse bg-white rounded-lg overflow-hidden shadow-sm">
+              {/* <table className="w-full border-collapse bg-white rounded-lg overflow-hidden shadow-sm">
                 <thead>
                   <tr className="bg-gradient-to-r from-blue-600 to-blue-700">
                     {desiredColumns.map((col, index) => (
@@ -553,7 +578,53 @@ useEffect(()=>{
                     ))}
                   </tr>
                 </tbody>
-              </table>
+              </table> */}
+        {/* <div className="p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {desiredColumns.map((col, index) => (
+            <div key={index} className="flex flex-col space-y-2">
+              <label className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                {col}
+              </label>
+              <div className="px-4 py-3 bg-gray-50 rounded-lg border border-gray-200 min-h-[48px] flex items-center cursor-pointer">
+                <span className="text-gray-800 w-full">
+                  {getFieldAsPerType(col)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div> */}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {desiredColumns.map((col, index) => (
+          <div key={index} className="group">
+            <label className="block text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">
+              {col}
+            </label>
+            <div className="relative">
+              <div className="w-full px-4 py-4 bg-white border-2 border-gray-200 rounded-xl shadow-sm transition-all duration-200 hover:border-blue-300 hover:shadow-md focus-within:border-blue-500 focus-within:shadow-lg cursor-pointer min-h-[56px] flex items-center">
+                <span className="text-gray-900 font-medium w-full">
+                  {getFieldAsPerType(col)}
+                </span>
+                {isDropDown(col) ? (
+                  <div className="absolute right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="absolute right-4">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
             </div>
           </div>
         )}
