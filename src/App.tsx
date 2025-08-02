@@ -1,30 +1,12 @@
 import { useEffect, useState } from "react";
 import * as XLSX from 'xlsx';
-import DOMPurify from "dompurify";
 import JSZip from "jszip";
 import { XMLParser } from "fast-xml-parser";
 import { Upload, FileSpreadsheet, Download, ChevronLeft, ChevronRight, Database, ChevronDown, ChevronUp } from "lucide-react";
+import CodePreview from "./components/CodePreview";
 
-type ColObject = { [index: string]: string }
-interface DataValidation {
-  sqref: string;
-  formula1: string;
-}
-
-interface DropDownMap {
-  col: number
-  sheet: string,
-  sheetCol: number
-  start: number,
-  end: number
-}
-
-interface DropDowns {
-  [col: string]: (string | number)[]
-}
-
-type Data = string | number
-type SheetData = Array<Array<Data>>
+import type { ColObject, SheetData, DataMap, DataValidation, DropDownMap, DropDowns } from "./DataTypes";
+import DataEntryTable from "./components/DataEntryTable";
 
 function App() {
   const [file, setFile] = useState<File>()
@@ -37,7 +19,7 @@ function App() {
   const [columnMap, setColumnMap] = useState<ColObject>({})
   const [activeRow, setActiveRow] = useState<number>(1)
   const [sheetData, setSheetData] = useState<SheetData>([]);
-  const [dataMap, setDataMap] = useState<{ [row: number]: { [col: string]: Data } }>({});
+  const [dataMap, setDataMap] = useState<DataMap>({});
   const [validations, setValidations] = useState<DataValidation[]>([]);
   const [dropDownMap, setDropDownMap] = useState<DropDownMap[]>([])
   const [dropDowns, setDropDowns] = useState<DropDowns>({})
@@ -199,15 +181,16 @@ function App() {
   function exportToExcel(event: React.MouseEvent<HTMLButtonElement>): void {
     event.preventDefault()
 
-    const rows = Object.values(dataMap);
-
-    // Create worksheet
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-
     // Create workbook
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
-
+    
+    for(const sheet in dataMap){
+      
+      const rows = Object.values(dataMap[sheet]);
+      // Create worksheet
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheet);
+    }
 
     // get current date
     const date = new Date();
@@ -236,16 +219,6 @@ function App() {
     setActiveRow(prev => prev - 1)
   }
 
-  function handleDataChange(row: number, col: string, value: string | number): void {
-    setDataMap(prev => ({
-      ...prev,
-      [row]: {
-        ...(prev[row] || {}),
-        [col]: value,
-      },
-    }));
-  }
-
   //Not Required in current requirement may be needed in future.
   // function addSheetCodeTable(table:NodeListOf<Element>):void{
   //   const obj : {[col:string]:Data}= {}
@@ -265,61 +238,9 @@ function App() {
   //   console.log(obj)
   // }
 
-  function getFieldAsPerType(col: string) {
-    switch (columnMap[col]) {
-      case "n": return <input
-        type="number"
-        name={col}
-        id={col}
-        className="w-full px-3 py-2 outline-none transition-all duration-200"
-        value={dataMap?.[activeRow]?.[col] ? dataMap[activeRow][col] : 0}
-        onChange={(e) => {
-          handleDataChange(activeRow, col, e.target.value)
-        }}
-      />;
-      case "d": return <input
-        type="date"
-        name={col}
-        id={col}
-        className="w-full px-3 py-2 outline-none transition-all duration-200"
-        value={(dataMap?.[activeRow]?.[col]) != null ? excelDateToJSDate(dataMap[activeRow][col] as (string | number)).toISOString().split("T")[0] : new Date().toISOString().split('T')[0]}
-        onChange={(e) => {
-          handleDataChange(activeRow, col, e.target.value)
-        }}
-      />;
-      case "l": return <select
-        name={col}
-        id={col}
-        className="w-full px-3 py-2 outline-none transition-all duration-200 bg-white appearance-none"
-        onChange={(e) => handleDataChange(activeRow, col, e.target.value)}
-      >
-        {
-          dropDowns && dropDowns[col].map(val => {
-            return <option value={val} key={val}>{val}</option>
-          })
-        }
-      </select>
-      default: return <input
-        type="text"
-        name={col}
-        id={col}
-        className="w-full px-3 py-2 outline-none transition-all duration-200"
-        value={dataMap?.[activeRow]?.[col] ? dataMap[activeRow][col] : ""}
-        onChange={(e) => {
-          handleDataChange(activeRow, col, e.target.value)
-        }}
-      />;
-    }
-  }
+  
 
-  function getCellValue(row: any[], columnName: string, columns: string[]) {
-    const colIndex = columns.indexOf(columnName);
-    if (colIndex !== -1 && row && row[colIndex] !== undefined) {
-      return DOMPurify.sanitize(row[colIndex]);
-    }
-    return null;
-  }
-
+ 
   function setRowValues(): void {
     const local_map: { [col: string]: string | number } = {}
     const row = sheetData[activeRow]
@@ -329,7 +250,10 @@ function App() {
     setDataMap(prev => {
       return {
         ...prev,
-        [activeRow]: { ...local_map }
+        [activeSheet as string]:{
+          ...prev[activeSheet as string],
+          [activeRow]:{...local_map}
+        }
       }
     })
   }
@@ -360,19 +284,6 @@ function App() {
         }
       })
     })
-  }
-
-  function excelDateToJSDate(serial: string | number): Date {
-    if (typeof serial == 'string') return new Date(serial);
-    const excelEpoch = new Date(1899, 11, 30);  // Excel considers 1900-01-01 as day 1, but there's a known 1-day offset 
-    const jsDate = new Date(excelEpoch.getTime());
-    jsDate.setDate(jsDate.getDate() + serial);
-    return jsDate;
-  }
-
-  function isDropDown(col: string): boolean {
-    if (col in dropDowns) return true
-    else return false;
   }
 
   //Side Effects
@@ -514,7 +425,7 @@ function App() {
             </div>
 
             {
-              <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 transition-all duration-300 ease-in-out overflow-hidden ${isCollapsed ? 'max-h-0' : 'max-h-[400px]'
+              <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 transition-all duration-300 ease-in-out overflow-y-scroll ${isCollapsed ? 'max-h-0' : 'max-h-[400px]'
                 }`}>
                 {columns.map((column, index) => (
                   <div key={`${column + index}`} className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer">
@@ -537,59 +448,12 @@ function App() {
 
         {/* Code Display */}
         {sheetData.length > 0 && columns.length > 0 && (
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-100 h-fit">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4">Code Preview</h2>
-            <div
-              className="bg-gray-50 p-4 rounded-lg border border-gray-200 min-h-20 overflow-auto h-fit"
-              dangerouslySetInnerHTML={{ __html: getCellValue(sheetData[activeRow], "Code", columns) as string }}
-              id="sheet-code"
-            />
-          </div>
+          <CodePreview sheetData={sheetData} activeRow={activeRow} columns={columns}/>
         )}
 
         {/* Data Entry Table */}
         {desiredColumns.length > 0 && columnMap && (
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-100">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-semibold text-gray-800">Data Entry</h2>
-              <div className="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
-                Row: {activeRow}
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-
-              {/* Columns  */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {desiredColumns.map((col, index) => (
-                  <div key={index} className="group">
-                    <label className="block text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">
-                      {col}
-                    </label>
-                    <div className="relative">
-                      <div className="w-full p-0 bg-white border-2 border-gray-200 rounded-xl shadow-sm transition-all duration-200 hover:border-blue-300 hover:shadow-md focus-within:border-blue-500 focus-within:shadow-lg cursor-pointer min-h-[56px] flex items-center">
-                        <span className="text-gray-900 font-medium w-full h-full">
-                          {getFieldAsPerType(col)}
-                        </span>
-                        {!isDropDown(col) ? (
-                          <div className="absolute right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                            </svg>
-                          </div>
-                        ) : (
-                          <div className="absolute right-4">
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <DataEntryTable activeRow={activeRow} dropDowns={dropDowns} setDataMap={setDataMap} desiredColumns={desiredColumns} dataMap={dataMap} columnMap={columnMap} activeSheet={activeSheet as string}/>
         )}
 
         {/* Navigation Controls */}
