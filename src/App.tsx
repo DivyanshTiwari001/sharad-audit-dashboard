@@ -559,43 +559,8 @@ useEffect(()=>{
               </div>
             </div>
             <div className="overflow-x-auto">
-              {/* <table className="w-full border-collapse bg-white rounded-lg overflow-hidden shadow-sm">
-                <thead>
-                  <tr className="bg-gradient-to-r from-blue-600 to-blue-700">
-                    {desiredColumns.map((col, index) => (
-                      <th key={index} className="px-6 py-4 text-white font-semibold text-left border-r border-blue-500 last:border-r-0 min-w-[300px]">
-                        {col}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="bg-white">
-                    {desiredColumns.map((col, index) => (
-                      <td key={index} className="px-6 py-4 border-r border-gray-200 last:border-r-0 min-w-40">
-                        {getFieldAsPerType(col)}
-                      </td>
-                    ))}
-                  </tr>
-                </tbody>
-              </table> */}
-        {/* <div className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {desiredColumns.map((col, index) => (
-            <div key={index} className="flex flex-col space-y-2">
-              <label className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                {col}
-              </label>
-              <div className="px-4 py-3 bg-gray-50 rounded-lg border border-gray-200 min-h-[48px] flex items-center cursor-pointer">
-                <span className="text-gray-800 w-full">
-                  {getFieldAsPerType(col)}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div> */}
-
+      
+      {/* Columns  */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {desiredColumns.map((col, index) => (
           <div key={index} className="group">
