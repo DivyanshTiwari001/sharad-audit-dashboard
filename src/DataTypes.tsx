@@ -5,11 +5,12 @@ export interface DataValidation {
 }
 
 export interface DropDownMap {
-  col: number
-  sheet: string,
-  sheetCol: number
-  start: number,
-  end: number
+  col: number;
+  sheet: string;
+  sheetCol: number;
+  type:string;
+  start: number;
+  end: number;
 }
 
 export interface DropDowns {

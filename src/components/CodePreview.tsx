@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useState,useEffect} from "react";
 import type { SheetData } from '../DataTypes';
 import { ChevronDown,ChevronUp } from "lucide-react";
 
@@ -6,6 +6,7 @@ import { ChevronDown,ChevronUp } from "lucide-react";
 
 function CodePreview({sheetData,activeRow,columns} : {sheetData:SheetData,activeRow:number,columns:Array<string>}) {
   const [isCollapsed, setCollapsed] = useState<boolean>(true)
+  const [htmlURL,setHtmlURL] = useState<string|undefined>(undefined)
 
   function getCellValue(row: any[], columnName: string, columns: string[]) {
     const colIndex = columns.indexOf(columnName);
@@ -14,6 +15,18 @@ function CodePreview({sheetData,activeRow,columns} : {sheetData:SheetData,active
     }
     return null;
   }
+
+  function createHtmlFile(row:any[],columnName:string,columns:string[]){
+    console.log(getCellValue(row,columnName,columns))
+    const htmlFileContent = `${getCellValue(row,columnName,columns)}`
+    const blob = new Blob([htmlFileContent],{type:'text/html'})
+    const url = URL.createObjectURL(blob)
+    setHtmlURL(url);
+  }
+
+  useEffect(()=>{
+    createHtmlFile(sheetData[activeRow], "Code", columns)
+  },[activeRow,sheetData])
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-100 h-fit">
@@ -32,8 +45,8 @@ function CodePreview({sheetData,activeRow,columns} : {sheetData:SheetData,active
               </div>
             </div>
             <iframe
-              className={`w-full bg-gray-50 p-4 rounded-lg border border-gray-200 min-h-20 transition-all duration-500 ease-in-out overflow-y-scroll ${isCollapsed ? 'max-h-0' : 'max-h-[600px]'}`}
-              srcDoc = { getCellValue(sheetData[activeRow], "Code", columns) as string }
+              className={`w-full ${isCollapsed?'h-0' : 'h-[600px]'} bg-gray-50 p-4 rounded-lg border border-gray-200 min-h-20 transition-all duration-500 ease-in-out overflow-y-scroll`}
+              src = { htmlURL }
               id="sheet-code"
             />
     </div>

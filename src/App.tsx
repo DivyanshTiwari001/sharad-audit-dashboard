@@ -5,7 +5,7 @@ import { XMLParser } from "fast-xml-parser";
 import { Upload, FileSpreadsheet, Download, ChevronLeft, ChevronRight, Database, ChevronDown, ChevronUp } from "lucide-react";
 import CodePreview from "./components/CodePreview";
 
-import type { ColObject, SheetData, DataMap, DataValidation, DropDownMap, DropDowns } from "./DataTypes";
+import type { ColObject, SheetData, DataMap, DataValidation, DropDownMap, DropDowns, Data } from "./DataTypes";
 import DataEntryTable from "./components/DataEntryTable";
 
 function App() {
@@ -16,7 +16,7 @@ function App() {
   const [sheetXmlMap, setSheetXmlMap] = useState<{ [index: string]: string }>({})
   const [columns, setColumns] = useState<string[]>([])
   const [desiredColumns, setDesiredColumns] = useState<string[]>([])
-  const [columnMap, setColumnMap] = useState<ColObject>({})
+  const [columnTypeMap, setcolumnTypeMap] = useState<ColObject>({})
   const [activeRow, setActiveRow] = useState<number>(1)
   const [sheetData, setSheetData] = useState<SheetData>([]);
   const [dataMap, setDataMap] = useState<DataMap>({});
@@ -24,6 +24,10 @@ function App() {
   const [dropDownMap, setDropDownMap] = useState<DropDownMap[]>([])
   const [dropDowns, setDropDowns] = useState<DropDowns>({})
   const [isCollapsed, setCollapsed] = useState<boolean>(true)
+  const [dependentColsMap,setDependentColsMap] = useState<{[index:number]:string}>({});
+  const [optRefMap,setOptRefMap] = useState<{[index:number]:string}>({}); 
+  const [indirectMap,setIndirectMap] = useState<{[index:Data]:Data[]}>({})
+
 
 
   const dateRegex: RegExp = /^(0?[1-9]|1[0-2])[\/\-](0?[1-9]|[12][0-9]|3[01])[\/\-](\d{4})$/;
@@ -54,7 +58,7 @@ function App() {
       }
       col_local[worksheet[key].v] = type
     })
-    setColumnMap(col_local)
+    setcolumnTypeMap(col_local)
   }
 
   function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
@@ -79,7 +83,6 @@ function App() {
 
   const addValidations = async (file: File) => {
     setValidations([]);
-
     if (!file) return;
 
     try {
@@ -87,6 +90,7 @@ function App() {
       const zip = await JSZip.loadAsync(file);
       const sheetName = sheetXmlMap[activeSheet as string] ? sheetXmlMap[activeSheet as string] : "sheet1.xml"
       // For simplicity, read data from first worksheet xml file – "sheet1.xml"
+
       const sheetXml = await zip.file(`xl/worksheets/${sheetName}`)?.async("text");
       if (!sheetXml) {
         console.error("Could not find worksheet XML inside the XLSX file.");
@@ -100,8 +104,14 @@ function App() {
       });
       const xmlObj = parser.parse(sheetXml);
 
+
       // Extract dataValidations (may be missing if no validations)
-      const dvs = xmlObj.worksheet.dataValidations?.dataValidation;
+      console.log(xmlObj)
+      const dvs = xmlObj.worksheet?.extLst?.ext["x14:dataValidations"]["x14:dataValidation"] ? xmlObj.worksheet.extLst.ext["x14:dataValidations"]["x14:dataValidation"] : xmlObj.worksheet.dataValidations?.dataValidation;
+      const otherValidations = xmlObj.worksheet?.dataValidations?.dataValidation
+      if (otherValidations) {
+        dvs.push(otherValidations)
+      }
       if (!dvs) {
         setValidations([]);
         return;
@@ -113,15 +123,18 @@ function App() {
       // Filter list type validations
       const listValidations: DataValidation[] = dvArray
         .filter((dv) => dv["@_type"] === "list")
-        .map((dv) => ({
-          sqref: dv["@_sqref"],
-          formula1: dv.formula1,
-        }));
+        .map(dv => {
+          return {
+            sqref: dv?.["xm:sqref"] ?? dv["@_sqref"],
+            formula1: dv?.["x14:formula1"]?.["xm:f"] ?? dv.formula1
+          }
+        })
       setValidations(listValidations);
     } catch (e) {
       console.error("Error reading file: " + (e as Error).message);
     }
   };
+
 
   function getColNumber(col: string): number {
     //convert AAAB type column to a index
@@ -134,8 +147,8 @@ function App() {
 
   function getDropDowns(vals: DataValidation[]): void {
     vals.forEach(val => {
-      const columns = val.sqref.split(":")
-      const col = columns[columns.length - 1]
+      const refColumns = val.sqref.split(":")
+      const col = refColumns[refColumns.length - 1]
       const indexOfNum = col.match(/\d/)
       let column = col
       if (indexOfNum) {
@@ -143,29 +156,67 @@ function App() {
       }
       const column_num = getColNumber(column)
       let sheetName = activeSheet as string
-      let options = []
-      if (val.formula1.includes("!")) {
-        const formulaParts = val.formula1.split("!")
-        sheetName = formulaParts[0].startsWith("'") && formulaParts[0].endsWith("'") ? formulaParts[0].slice(1, -1) : formulaParts[0]
-        options = formulaParts[1].split(":")
-      }
-      else options = val.formula1.split(":")
-      const start = parseInt(options[0].split("$")[2])
-      const end = parseInt(options[1].split("$")[2])
-      const sheetCol = getColNumber(options[0].split("$")[1])
+      let type = "direct"
+      if (val.formula1.toLowerCase().includes("indirect")) {
+        type = "indirect";
+        const dependency_col = val.formula1.split('$')[1][0];
+        const dependency_column_num = getColNumber(dependency_col);
+        const dependency = dropDownMap.filter(dd => dd.col === dependency_column_num)[0];
+        if(!dependency)return;
+        
+        setDependentColsMap(prev=>{
+          return {
+            ...prev,
+            [dependency.sheetCol]:columns[column_num]
+          }
+        })
 
-      setDropDownMap(prev =>
-      ([...prev,
-      {
-        col: column_num,
-        sheet: sheetName,
-        sheetCol: sheetCol,
-        start: start,
-        end: end
+        setDropDownMap(prev =>
+        ([...prev,
+        {
+          col: column_num,
+          sheet: dependency.sheet,
+          sheetCol: dependency.sheetCol,
+          type,
+          start: dependency.start,
+          end: dependency.end,
+        }
+        ]
+        )
+        )
       }
-      ]
-      )
-      )
+      else {
+        let options = []
+        if (val.formula1.includes("!")) {
+          const formulaParts = val.formula1.split("!")
+          sheetName = formulaParts[0].startsWith("'") && formulaParts[0].endsWith("'") ? formulaParts[0].slice(1, -1) : formulaParts[0]
+          options = formulaParts[1].split(":")
+        }
+        else options = val.formula1.split(":")
+        const start = parseInt(options[0].split("$")[2])
+        const end = parseInt(options[1].split("$")[2])
+        const sheetCol = getColNumber(options[0].split("$")[1])
+        // optRefMap.set(sheetCol, columns[column_num]);
+
+        setOptRefMap(prev=>({
+          ...prev,
+          [sheetCol]:columns[column_num]
+        }))
+        setDropDownMap(prev =>
+        ([...prev,
+        {
+          col: column_num,
+          sheet: sheetName,
+          sheetCol: sheetCol,
+          type,
+          start: start,
+          end: end,
+        }
+        ]
+        )
+        )
+
+      }
 
     })
   }
@@ -183,9 +234,9 @@ function App() {
 
     // Create workbook
     const workbook = XLSX.utils.book_new();
-    
-    for(const sheet in dataMap){
-      
+
+    for (const sheet in dataMap) {
+
       const rows = Object.values(dataMap[sheet]);
       // Create worksheet
       const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -219,57 +270,61 @@ function App() {
     setActiveRow(prev => prev - 1)
   }
 
-  //Not Required in current requirement may be needed in future.
-  // function addSheetCodeTable(table:NodeListOf<Element>):void{
-  //   const obj : {[col:string]:Data}= {}
-  //   const cols = table[0].querySelectorAll("th")
-  //   const values = table[1].querySelectorAll("td")
-  //   console.log(cols,values)
-  //   cols.forEach((col,index)=>{
-  //     obj[col.innerText] = values[index].innerText
-  //   })
-  //    setDataMap(prev => ({
-  //   ...prev,
-  //   [activeRow]: {
-  //     ...(prev[activeRow] || {}),
-  //     ...(obj)
-  //   },
-  // }));
-  //   console.log(obj)
-  // }
 
-  
 
- 
   function setRowValues(): void {
-    const local_map: { [col: string]: string | number } = {}
+    const local_map: { [col: string]: string | number } = {};
     const row = sheetData[activeRow]
+
+    //initializing datamap for each row
+    columns.forEach(col => {
+      let value = undefined;
+      if (columnTypeMap[col] === 'n') value = 0;
+      else value = '';
+      local_map[col] = value;
+    })
+
     row?.forEach((value, index) => {
-      local_map[columns[index]] = value
+      if (!value) {
+        if (columnTypeMap[columns[index]] === 's') value = '';
+        else if (columnTypeMap[columns[index]] === 'n') value = 0;
+      }
+      local_map[columns[index]] = value;
     })
     setDataMap(prev => {
       return {
         ...prev,
-        [activeSheet as string]:{
+        [activeSheet as string]: {
           ...prev[activeSheet as string],
-          [activeRow]:{...local_map}
+          [activeRow]: { ...local_map }
         }
       }
     })
   }
 
   function extractOptions(dropDownMap: DropDownMap[]): void {
-    dropDownMap.forEach(dp => {
-      const col_name = columns[dp.col]
-      const sheet = workbook?.Sheets[dp.sheet]
-      const options: (string | number)[] = []
-      const jsonData = XLSX.utils.sheet_to_json(sheet as XLSX.WorkSheet, { header: 1 }) as [];
-      for (let i = dp.start - 1; i < dp.end; i++) {
-        if (jsonData[i] && jsonData[i][dp.sheetCol]) {
-          options.push(jsonData[i][dp.sheetCol])
-        }
+    dropDownMap.forEach(dropDown => {
+      const col_name = columns[dropDown.col]
+      if (dropDown.type === "indirect") {
+        const headers = extractIndirectOptions(dropDown);
+        setDropDowns(prev => {
+          return {
+            ...prev,
+            [col_name]: indirectMap[headers[0]] as string[]
+          }
+        })
+
+        setcolumnTypeMap(prev => {
+          return {
+            ...prev,
+            [col_name]: "rl"
+          }
+        })
+
+        return;
       }
 
+      const options: (string | number)[] = extractDirectOptions(dropDown);
       setDropDowns(prev => {
         return {
           ...prev,
@@ -277,13 +332,57 @@ function App() {
         }
       })
 
-      setColumnMap(prev => {
+      setcolumnTypeMap(prev => {
         return {
           ...prev,
           [col_name]: "l"
         }
       })
     })
+  }
+
+  function extractIndirectOptions(dropDown: DropDownMap): string[] {
+    const headers = extractDirectOptions(dropDown) as string[];
+    const sheet = workbook?.Sheets[dropDown.sheet]
+    const jsonData = XLSX.utils.sheet_to_json(sheet as XLSX.WorkSheet, { header: 1 }) as [];
+    headers.forEach(header => {
+      let row = 0; let col = 0;
+      for (; row < jsonData.length; row++) {
+        const arr: (string | number)[] = jsonData[row]
+        const idx = arr.indexOf(header);
+        if (idx !== -1 && idx !== dropDown.sheetCol) {
+          col = idx;
+          break;
+        }
+      }
+
+      row = row + 1; //move to first option 
+      if (row >= jsonData.length || col === dropDown.sheetCol) return;
+      const options: Data[] = [];
+      while (row < jsonData.length && jsonData[row][col]) {
+        options.push(jsonData[row++][col])
+      }
+      // indirectMap.set(header, options)
+      setIndirectMap(prev=>(
+        {
+          ...prev,
+          [header]:options,
+        }
+      ))
+    })
+    return headers;
+  }
+
+  function extractDirectOptions(dropDown: DropDownMap): (string | number)[] {
+    const sheet = workbook?.Sheets[dropDown.sheet]
+    const options: (string | number)[] = []
+    const jsonData = XLSX.utils.sheet_to_json(sheet as XLSX.WorkSheet, { header: 1 }) as [];
+    for (let i = dropDown.start - 1; i < dropDown.end; i++) {
+      if (jsonData[i] && jsonData[i][dropDown.sheetCol]) {
+        options.push(jsonData[i][dropDown.sheetCol])
+      }
+    }
+    return options;
   }
 
   //Side Effects
@@ -448,12 +547,26 @@ function App() {
 
         {/* Code Display */}
         {sheetData.length > 0 && columns.length > 0 && (
-          <CodePreview sheetData={sheetData} activeRow={activeRow} columns={columns}/>
+          <CodePreview sheetData={sheetData} activeRow={activeRow} columns={columns} />
         )}
 
         {/* Data Entry Table */}
-        {desiredColumns.length > 0 && columnMap && (
-          <DataEntryTable activeRow={activeRow} dropDowns={dropDowns} setDataMap={setDataMap} desiredColumns={desiredColumns} dataMap={dataMap} columnMap={columnMap} activeSheet={activeSheet as string}/>
+        {desiredColumns.length > 0 && columns.length > 0 && columnTypeMap && (
+          <DataEntryTable
+            sheetColumns={columns}
+            activeRow={activeRow}
+            dropDowns={dropDowns}
+            setDataMap={setDataMap}
+            desiredColumns={desiredColumns}
+            dataMap={dataMap}
+            columnTypeMap={columnTypeMap}
+            activeSheet={activeSheet as string}
+            indirectMap={indirectMap}
+            optRefMap={optRefMap}
+            dependentColsMap={dependentColsMap}
+            setDropDowns={setDropDowns}
+          />
+
         )}
 
         {/* Navigation Controls */}
