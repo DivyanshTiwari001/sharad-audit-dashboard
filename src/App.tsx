@@ -79,6 +79,17 @@ function App() {
 
   }
 
+ function simplifyIndirectFormula(formula: string): string {
+  // Match =INDIRECT(VLOOKUP(...))
+  const regex = /^=INDIRECT\s*\(\s*VLOOKUP\(([^,]+),.*\)\s*\)$/i;
+
+  const match = formula.match(regex);
+  if (!match) return formula; // return unchanged if not matching
+
+  const lookupValue = match[1]; // first argument of VLOOKUP
+  return `=INDIRECT(${lookupValue})`;
+}
+
 
 
   const addValidations = async (file: File) => {
