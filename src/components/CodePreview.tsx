@@ -11,14 +11,62 @@ function CodePreview({sheetData,activeRow,columns} : {sheetData:SheetData,active
   function getCellValue(row: any[], columnName: string, columns: string[]) {
     const colIndex = columns.indexOf(columnName);
     if (colIndex !== -1 && row && row[colIndex] !== undefined) {
-      return row[colIndex];
+       const htmlCode = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset=utf-8 />
+  <title></title>
+  <style>
+
+img.demo {
+   filter: brightness(200%);
+}
+
+table, th, td {
+  border: 1px solid white;
+  border-collapse: collapse;
+}
+th, td {
+  background-color: #96D4D4;
+}
+    div.container {
+      display:inline-block;
+    }
+
+    p {
+      text-align:center;
+    }
+
+table, th, td {
+  border: 8px solid black;
+ padding: 5px;
+text-align: center;
+  
+}
+  </style>
+</head>
+<body>
+
+<table style="width:100%">
+  <tr>
+    <th><h1> PICK FROM POD - STATIC QUALITY PLATFORM</h1></th> <hr>
+ 
+</table>
+
+  ${row[colIndex]}
+
+
+</body>
+</html>`
+      return htmlCode;
     }
     return null;
   }
 
   function createHtmlFile(row:any[],columnName:string,columns:string[]){
-    console.log(getCellValue(row,columnName,columns))
-    const htmlFileContent = `${getCellValue(row,columnName,columns)}`
+   
+    const code = getCellValue(row,columnName,columns);
+    const htmlFileContent = `${code?code:""}`
     const blob = new Blob([htmlFileContent],{type:'text/html'})
     const url = URL.createObjectURL(blob)
     setHtmlURL(url);

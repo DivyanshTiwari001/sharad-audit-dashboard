@@ -1,17 +1,23 @@
+import { useEffect } from 'react';
 import type { Data } from '../DataTypes'
 
 
 interface ICustomInputProps {
     type: string,
     name: string,
-    value: Data | Data[],
+    value: Data
+    values?: Data[],
     className: string,
     id?: string,
     handleValueChange: (col: string, value: Data) => void;
 }
 
 function CustomInput(props: ICustomInputProps) {
-    const { type, name, value, handleValueChange, className, id } = props;
+    const { type, name, value, handleValueChange, className, id,values } = props;
+
+    useEffect(()=>{
+        handleValueChange(name,value as Data);
+    },[])
 
 
     function excelDateToJSDate(serial: string | number): Date {
@@ -52,9 +58,10 @@ function CustomInput(props: ICustomInputProps) {
                     id={col}
                     className="w-full px-3 py-2 outline-none transition-all duration-200 bg-white appearance-none"
                     onChange={(e) => handleValueChange(col, e.target.value)}
+                    value={value as Data}
                 >
                     {
-                        (value as Data[]).map(val => {
+                        (values as Data[]).map(val => {
                             return <option value={val} key={val}>{val}</option>
                         })
                     }

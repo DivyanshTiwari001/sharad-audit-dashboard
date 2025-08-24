@@ -27,7 +27,8 @@ function App() {
   const [dependentColsMap,setDependentColsMap] = useState<{[index:number]:string}>({});
   const [optRefMap,setOptRefMap] = useState<{[index:number]:string}>({}); 
   const [indirectMap,setIndirectMap] = useState<{[index:Data]:Data[]}>({})
-
+  const [showLoader,setShowLoader] = useState<boolean>(false);
+  const [auditor,setAuditor] = useState<string | null>()
 
 
   const dateRegex: RegExp = /^(0?[1-9]|1[0-2])[\/\-](0?[1-9]|[12][0-9]|3[01])[\/\-](\d{4})$/;
@@ -62,10 +63,21 @@ function App() {
   }
 
   function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setFile(file)
-
+    setShowLoader(true);
+    const localFileImage = event.target.files?.[0];
+    if (!localFileImage) {
+      setShowLoader(false);
+      return;
+    }
+    if (localFileImage) {
+  // Convert to MB
+    const sizeMB = localFileImage.size / (1024 * 1024);
+    if (sizeMB > 60) {
+      alert("File is too large! (Max 50MB allowed)");
+      return;
+    }
+}
+    setFile(localFileImage);
     const reader = new FileReader();
     reader.onload = (e) => {
       const data = new Uint8Array(e.target?.result as ArrayBuffer);
@@ -73,23 +85,28 @@ function App() {
       setWorkBook(workbook_local)
       setOptions(workbook_local.SheetNames)
       listColumns(workbook_local.SheetNames[0], workbook_local)
+      setShowLoader(false);
     };
 
-    reader.readAsArrayBuffer(file);
-
+    reader.readAsArrayBuffer(localFileImage);
+    reader.onerror = () => {
+      alert("Error reading file.");
+      setShowLoader(false);
+    };
+    reader.readAsArrayBuffer(localFileImage);
   }
 
- function simplifyIndirectFormula(formula: string): string {
+
+   function simplifyIndirectFormula(formula: string): string {
   // Match =INDIRECT(VLOOKUP(...))
-  const regex = /^=INDIRECT\s*\(\s*VLOOKUP\(([^,]+),.*\)\s*\)$/i;
+  const regex = /^INDIRECT\s*\(\s*VLOOKUP\(([^,]+),.*\)\s*\)$/i;
 
   const match = formula.match(regex);
   if (!match) return formula; // return unchanged if not matching
 
   const lookupValue = match[1]; // first argument of VLOOKUP
-  return `=INDIRECT(${lookupValue})`;
+  return `INDIRECT(${lookupValue})`;
 }
-
 
 
   const addValidations = async (file: File) => {
@@ -117,7 +134,6 @@ function App() {
 
 
       // Extract dataValidations (may be missing if no validations)
-      console.log(xmlObj)
       const dvs = xmlObj.worksheet?.extLst?.ext["x14:dataValidations"]["x14:dataValidation"] ? xmlObj.worksheet.extLst.ext["x14:dataValidations"]["x14:dataValidation"] : xmlObj.worksheet.dataValidations?.dataValidation;
       const otherValidations = xmlObj.worksheet?.dataValidations?.dataValidation
       if (otherValidations) {
@@ -137,10 +153,15 @@ function App() {
         .map(dv => {
           return {
             sqref: dv?.["xm:sqref"] ?? dv["@_sqref"],
-            formula1: dv?.["x14:formula1"]?.["xm:f"] ?? dv.formula1
+            formula1: simplifyIndirectFormula(dv?.["x14:formula1"]?.["xm:f"] ?? dv.formula1)
           }
         })
-      setValidations(listValidations);
+      const directValidations = listValidations.filter(val => !val.formula1.toLowerCase().includes("indirect"));
+      const indirectValidations = listValidations.filter(val => val.formula1.toLowerCase().includes("indirect"));
+
+      const orderedValidations = [...directValidations, ...indirectValidations];
+      setValidations(orderedValidations);
+      
     } catch (e) {
       console.error("Error reading file: " + (e as Error).message);
     }
@@ -197,11 +218,11 @@ function App() {
         )
       }
       else {
-        let options = []
+        let options:string[] = []
         if (val.formula1.includes("!")) {
           const formulaParts = val.formula1.split("!")
           sheetName = formulaParts[0].startsWith("'") && formulaParts[0].endsWith("'") ? formulaParts[0].slice(1, -1) : formulaParts[0]
-          options = formulaParts[1].split(":")
+          options = formulaParts[1].split(":") 
         }
         else options = val.formula1.split(":")
         const start = parseInt(options[0].split("$")[2])
@@ -289,7 +310,7 @@ function App() {
 
     //initializing datamap for each row
     columns.forEach(col => {
-      let value = undefined;
+      let value:Data | undefined = undefined;
       if (columnTypeMap[col] === 'n') value = 0;
       else value = '';
       local_map[col] = value;
@@ -317,11 +338,13 @@ function App() {
     dropDownMap.forEach(dropDown => {
       const col_name = columns[dropDown.col]
       if (dropDown.type === "indirect") {
-        const headers = extractIndirectOptions(dropDown);
+        const {headers,indirectOptions} = extractIndirectOptions(dropDown);
+        if(!headers.length || !indirectOptions)return;
+        const options = indirectOptions?.[headers[0]] || ["No Options"];
         setDropDowns(prev => {
           return {
             ...prev,
-            [col_name]: indirectMap[headers[0]] as string[]
+            [col_name]: options as string[]
           }
         })
 
@@ -331,11 +354,11 @@ function App() {
             [col_name]: "rl"
           }
         })
-
         return;
       }
 
       const options: (string | number)[] = extractDirectOptions(dropDown);
+      if (!options.length) return;
       setDropDowns(prev => {
         return {
           ...prev,
@@ -352,36 +375,47 @@ function App() {
     })
   }
 
-  function extractIndirectOptions(dropDown: DropDownMap): string[] {
+  function getAllIndexesOf(arr: Array<any>, val: any): number[] {
+    const indexes: number[] = [];
+    arr.forEach((elem, index) => {
+      if (elem === val) {
+        indexes.push(index);
+      }
+    })
+    return indexes;
+  }
+
+  function extractIndirectOptions(dropDown: DropDownMap): {headers:string[],indirectOptions:{[index:Data]:Data[]}} {
     const headers = extractDirectOptions(dropDown) as string[];
     const sheet = workbook?.Sheets[dropDown.sheet]
     const jsonData = XLSX.utils.sheet_to_json(sheet as XLSX.WorkSheet, { header: 1 }) as [];
+    const local_indirectMap:{[index:Data]:Data[]} = {}
     headers.forEach(header => {
       let row = 0; let col = 0;
       for (; row < jsonData.length; row++) {
         const arr: (string | number)[] = jsonData[row]
-        const idx = arr.indexOf(header);
-        if (idx !== -1 && idx !== dropDown.sheetCol) {
-          col = idx;
+        const idxs = getAllIndexesOf(arr, header);
+        if (idxs.length !== 0 ) {
+          col = idxs.filter(idx=>idx!==dropDown.sheetCol)[0];
           break;
         }
       }
-
       row = row + 1; //move to first option 
+
+
       if (row >= jsonData.length || col === dropDown.sheetCol) return;
+
+
       const options: Data[] = [];
       while (row < jsonData.length && jsonData[row][col]) {
         options.push(jsonData[row++][col])
       }
+
       // indirectMap.set(header, options)
-      setIndirectMap(prev=>(
-        {
-          ...prev,
-          [header]:options,
-        }
-      ))
+      local_indirectMap[header] = options;
     })
-    return headers;
+    setIndirectMap(prev=>({...prev,...local_indirectMap}))
+    return {headers,indirectOptions:local_indirectMap};;
   }
 
   function extractDirectOptions(dropDown: DropDownMap): (string | number)[] {
@@ -410,8 +444,9 @@ function App() {
 
   //To unselect checkboxes on file change
   useEffect(() => {
+    if(!file)return;
     document.querySelectorAll('input[type=checkbox]').forEach(cb => (cb as HTMLInputElement).checked = false);
-  }, [file])
+  }, [file,activeSheet])
 
   //Maping sheet name to its corresponding xml name
   useEffect(() => {
@@ -438,6 +473,22 @@ function App() {
   }, [activeRow, sheetData])
 
 
+  useEffect(()=>{
+    if(activeSheet && workbook){
+      const worksheet = workbook?.Sheets[activeSheet]
+    const jsonData = XLSX.utils.sheet_to_json(worksheet as XLSX.WorkSheet, { header: 1 });
+    const filteredData:SheetData = (jsonData as SheetData).slice(1).filter(row=>{
+      const idx = (jsonData[0] as Data[]).indexOf("Auditor Login")
+      if(idx>=row.length || !auditor || auditor==='')return true;
+      else return row[idx] === auditor
+    }
+    )
+    const filteredSheetData: SheetData = [jsonData[0] as Data[],...filteredData];
+    setSheetData(filteredSheetData as SheetData)
+    }
+  },[auditor,activeSheet,workbook])
+
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
       <div className="container mx-auto px-6 py-8">
@@ -455,6 +506,37 @@ function App() {
         </div>
 
         {/* File Upload Section */}
+
+        {
+          showLoader ?
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <div
+        style={{
+          padding: '2rem 3rem',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+        }}
+      >
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" className="animate-spin mb-4">
+          <circle cx="24" cy="24" r="20" stroke="#3B82F6" strokeWidth="4" strokeDasharray="100" strokeDashoffset="60" />
+        </svg>
+        <span style={{ fontSize: '1.25rem', color: '#3B82F6', fontWeight: 500 }}>Loading...</span>
+      </div>
+    </div>:
+          <>
         <div className="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-100">
           <h2 className="text-2xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
             <Upload className="w-6 h-6 text-blue-600" />
@@ -487,31 +569,47 @@ function App() {
               <h2 className="text-2xl font-semibold text-gray-800 mb-4">Worksheet Management</h2>
               <h2 className="text-xl font-semibold text-gray-800 mb-4">File : <span className="text-blue-500">{file?.name}</span></h2>
             </div>
-            <div className="flex flex-col items-start">
+          <div className="w-full flex flex-row justify-start">
+              <div className="flex flex-col items-start w-[40%]">
               <label htmlFor="sheets" className="block text-md font-medium text-gray-700 mb-2 text-bold">
                 Select Worksheet
               </label>
-              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center sm:justify-between w-full">
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center sm:justify-between w-full h-[50px]">
                 <select
                   name="sheets"
                   id="sheets"
                   value={activeSheet}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200 bg-white sm:w-[60%]"
+                  className="w-full h-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200 bg-white sm:w-[60%]"
                   onChange={(event: React.ChangeEvent<HTMLSelectElement>) => listColumns(event.target.value, workbook as XLSX.WorkBook)}
                 >
                   {options.map((elem: string) => (
                     <option value={elem} key={elem}>{elem}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            <div className="w-[60%] flex flex-row justify-between items-center ">
+                  <div className="w-[400px] h-full">
+                    <label htmlFor="auditor" className="block text-md font-medium text-gray-700 mb-2 text-bold">Auditor</label>
+                  <div className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200 bg-white sm:w-[60%] h-[50px] flex flex-row justify-between">
+                  <input type="text" value={auditor? auditor : ''} onChange={(e)=>{setAuditor(e.target.value)}} className="h-full outline-none"  id="auditor"/>
+                  <div className="">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                </div>
+                  </div>
+                </div>
                 <button
                   onClick={exportToExcel}
-                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center gap-2 font-medium shadow-md"
+                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center gap-2 font-medium shadow-md h-fit"
                 >
                   <Download className="w-5 h-5" />
                   Export Data
                 </button>
-              </div>
             </div>
+          </div>
 
           </div>
         )}
@@ -557,7 +655,7 @@ function App() {
         )}
 
         {/* Code Display */}
-        {sheetData.length > 0 && columns.length > 0 && (
+        {sheetData && sheetData.length > 0 && columns.length > 0 && (
           <CodePreview sheetData={sheetData} activeRow={activeRow} columns={columns} />
         )}
 
@@ -603,6 +701,8 @@ function App() {
             </div>
           </div>
         )}
+        </>
+      }
       </div>
     </div>
   )

@@ -8,7 +8,6 @@ import CustomInput from "./CustomInput";
 function DataEntryTable({ sheetColumns,activeRow, dropDowns, desiredColumns, columnTypeMap, dataMap, setDataMap, activeSheet, indirectMap, optRefMap, dependentColsMap, setDropDowns }:
     { sheetColumns:string[],activeRow: number, dropDowns: DropDowns, desiredColumns: string[], columnTypeMap: ColObject, dataMap: DataMap, setDataMap: React.Dispatch<React.SetStateAction<DataMap>>, activeSheet: string, indirectMap:{[index:Data]:Data[]}, optRefMap: {[index:number]:string}, dependentColsMap:{[index:number]:string}, setDropDowns: React.Dispatch<React.SetStateAction<DropDowns>> }) {
     const [isCollapsed, setCollapsed] = useState<boolean>(true)
-
     function handleDataChange(col: string, value: string | number): void {
         setDataMap(prev => ({
             ...prev,
@@ -96,35 +95,22 @@ useEffect(() => {
 
 
 useEffect(() => {
+   if(!indirectMap)return;
+    if(!optRefMap)return;
   const row = dataMap[activeSheet]?.[activeRow];
   if (!row) return;
   const keys = Object.keys(dependentColsMap);
   keys.forEach(key=>{
-    const col = optRefMap[parseInt(key)];
+    const col = optRefMap?.[parseInt(key)];
     if(!col)return;
-
     const value = row[col];
-
     if(!value) return;
-
-
     setDropDowns(prev=>({
       ...prev,
-      [dependentColsMap[parseInt(key)]]:indirectMap[value] as Data[],
+      [dependentColsMap[parseInt(key)]]:indirectMap?.[value] as Data[],
     }))
   })
-  // for (const sheetCol in dependentColsMap) {
-  //   const col = optRefMap.get(sheetCol);
-  //   if (!col) continue;
 
-  //   const driverValue = row[col];
-  //   if (!driverValue) continue;
-
-  //   setDropDowns(prev => ({
-  //     ...prev,
-  //     [column]: indirectMap.get(driverValue) as Data[],
-  //   }));
-  // }
 }, [
   activeSheet,
   activeRow,
@@ -137,12 +123,13 @@ useEffect(() => {
 
     const columns = useMemo(() => {
         if(!dataMap[activeSheet][activeRow])return;
+        if(!dropDowns)return;
         return desiredColumns.map(col => {
             return <CustomInput
                 name={col}
                 type={columnTypeMap[col]}
                 className={`${activeSheet}__${activeRow}__cols-${col}`}
-                handleValueChange={handleDataChange} value={(columnTypeMap[col] !== 'l' && columnTypeMap[col] !== 'rl') ? dataMap[activeSheet][activeRow][col] : dropDowns[col]} />
+                handleValueChange={handleDataChange} value={dataMap[activeSheet][activeRow][col]?dataMap[activeSheet][activeRow][col] :(columnTypeMap[col] !== 'l' && columnTypeMap[col] !== 'rl')?(columnTypeMap[col]=='n'?0:''):dropDowns[col][0]} values={(columnTypeMap[col] !== 'l' && columnTypeMap[col] !== 'rl') ? [] : dropDowns[col]} />
 
         });
     }, [dataMap, desiredColumns, columnTypeMap, activeSheet, activeRow,dropDowns]);
