@@ -590,9 +590,9 @@ function App() {
             </div>
 
             <div className="w-[60%] flex flex-row justify-between items-center ">
-                  <div className="w-[400px] h-full">
+                  <div className="w-fit min-w-[400px] h-full">
                     <label htmlFor="auditor" className="block text-md font-medium text-gray-700 mb-2 text-bold">Auditor</label>
-                  <div className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200 bg-white sm:w-[60%] h-[50px] flex flex-row justify-between">
+                  <div className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all duration-200 bg-white sm:w-[60%] min-w-fit h-[50px] flex flex-row justify-between">
                   <input type="text" value={auditor? auditor : ''} onChange={(e)=>{setAuditor(e.target.value)}} className="h-full outline-none"  id="auditor"/>
                   <div className="">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -603,7 +603,7 @@ function App() {
                 </div>
                 <button
                   onClick={exportToExcel}
-                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center gap-2 font-medium shadow-md h-fit"
+                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center gap-2 font-medium shadow-md max-h-[50px] h-fit"
                 >
                   <Download className="w-5 h-5" />
                   Export Data
